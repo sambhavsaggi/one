@@ -23,6 +23,59 @@
 #include <mutex>
 #include <chrono>
 #include <condition_variable>
+#include <thread>
+
+#include <iostream>
+/**
+ *  The Timer class executes a given action periodically in a separate thread.
+ *  The thread is terminated when the object is deleted
+ */
+class Timer
+{
+public:
+    Timer(int s, std::function<void()> timer)
+    {
+        end = false;
+
+        timer_thread = std::thread([&, s, timer]{
+
+            std::unique_lock<std::mutex> ul(lock);
+
+            while(true)
+            {
+                bool tout = cond.wait_for(ul, std::chrono::seconds(s), [&]{
+                        return end == true;
+                });
+
+                if (end)
+                {
+                    return;
+                }
+                else if (!tout)
+                {
+                    timer();
+                }
+            }
+        });
+    };
+
+    ~Timer()
+    {
+        end = true;
+
+        cond.notify_one();
+
+        timer_thread.join();
+    }
+
+private:
+    std::atomic<bool> end;
+
+    std::thread timer_thread;
+
+    std::mutex lock;
+    std::condition_variable cond;
+};
 
 /**
  *  This class implements basic functionality to listen for events. Events are
@@ -47,46 +100,6 @@ public:
         ul.unlock();
 
         cond.notify_one();
-    }
-
-    /**
-     *  Starts the event loop waiting for events. This function executes a timer
-     *  event every s seconds. For example:
-     *    listner.start(5, [&](){ timer_func();});
-     *
-     *    @param s seconds
-     *    @param timer the timer event
-     */
-    void start(time_t s, std::function<void()> timer)
-    {
-        std::chrono::seconds secs(s);
-
-        end = false;
-
-        std::unique_lock<std::mutex> ul(lock);
-
-        while(true)
-        {
-            bool tout = cond.wait_for(ul, secs, [&]{
-                        return (end || !pending.empty());
-                    });
-
-            if (end)
-            {
-                return;
-            }
-            else if (!tout)
-            {
-                timer();
-            }
-            else if (!pending.empty())
-            {
-                auto fn = pending.front();
-                pending.pop();
-
-                fn();
-            }
-        }
     }
 
     /**
@@ -133,7 +146,5 @@ private:
 
     std::queue<std::function<void()>> pending;
 };
-
-
 
 #endif /*LISTENER_H_*/

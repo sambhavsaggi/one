@@ -9,12 +9,9 @@ class EventAdder
 public:
     void start()
     {
-        listener.start(1, [&](){
-            if (state < 2)
-            {
-                ++state;
-            }
-        });
+        timer.reset(new Timer(1, [&]{ timer_action(); }));
+
+        listener.start();
     }
 
     void finalize()
@@ -36,6 +33,14 @@ public:
         return state;
     }
 
+    void timer_action()
+    {
+        if ( state < 2 )
+        {
+            ++state;
+        }
+    }
+
 private:
     void _add(int a)
     {
@@ -45,6 +50,8 @@ private:
     int state;
 
     Listener listener;
+
+    std::unique_ptr<Timer> timer;
 };
 
 TEST_CASE( "Listner and function callbacks", "[listener]" ) {
@@ -53,6 +60,8 @@ TEST_CASE( "Listner and function callbacks", "[listener]" ) {
     std::thread t([&](){ea.start();});
 
     sleep(4); //Make sure at least 2 timers
+
+    REQUIRE( ea.adder() == 2 );
 
     ea.add(2);
 
