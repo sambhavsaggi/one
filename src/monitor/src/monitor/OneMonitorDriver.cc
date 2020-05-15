@@ -42,6 +42,9 @@ OneMonitorDriver::OneMonitorDriver(HostMonitorManager * _hm)
 
     register_action(OpenNebulaMessages::STOP_MONITOR,
             &OneMonitorDriver::_stop_monitor);
+
+    register_action(OpenNebulaMessages::RAFT_STATUS,
+            &OneMonitorDriver::_raft_status);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -152,4 +155,17 @@ void OneMonitorDriver::_start_monitor(message_t msg)
 void OneMonitorDriver::_stop_monitor(message_t msg)
 {
     hm->stop_host_monitor(msg->oid());
+}
+
+/* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+
+void OneMonitorDriver::_raft_status(message_t msg)
+{
+    istringstream iss(msg->payload());
+    bool is_leader;
+
+    iss >> is_leader;
+
+    hm->raft_status(is_leader);
 }

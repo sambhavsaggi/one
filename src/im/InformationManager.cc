@@ -20,6 +20,7 @@
 #include "VirtualMachinePool.h"
 #include "Nebula.h"
 #include "LifeCycleManager.h"
+#include "RaftManager.h"
 
 /* -------------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------- */
@@ -60,29 +61,13 @@ int InformationManager::start()
         NebulaLog::info("InM", "Information Manager stopped.");
     });
 
-    // Send the list of hosts to the driver
-
-    auto * imd = get_driver("monitord");
-
-    if (!imd)
+    auto rftm = Nebula::instance().get_raftm();
+    if (rftm->is_leader() || rftm->is_solo())
     {
-        NebulaLog::error("InM", "Could not find information driver 'monitor'");
-
-        return rc;
+        raft_status(true);
     }
 
-    string xml_hosts;
-
-    hpool->dump(xml_hosts, "", 0, -1, false);
-
-    Message<OpenNebulaMessages> msg;
-
-    msg.type(OpenNebulaMessages::HOST_LIST);
-    msg.payload(xml_hosts);
-
-    imd->write(msg);
-
-    return rc;
+    return 0;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -180,6 +165,31 @@ void InformationManager::delete_host(int hid)
 
     msg.type(OpenNebulaMessages::DEL_HOST);
     msg.oid(hid);
+
+    imd->write(msg);
+}
+
+/* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+
+void InformationManager::raft_status(bool leader)
+{
+    if (leader)
+    {
+        send_host_pool();
+    }
+
+    auto imd = get_driver("monitord");
+
+    if (!imd)
+    {
+        return;
+    }
+
+    Message<OpenNebulaMessages> msg;
+
+    msg.type(OpenNebulaMessages::RAFT_STATUS);
+    msg.payload(to_string(leader));
 
     imd->write(msg);
 }
@@ -555,3 +565,27 @@ void InformationManager::_vm_state(unique_ptr<Message<OpenNebulaMessages>> msg)
 /* -------------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------- */
 
+int InformationManager::send_host_pool()
+{
+    auto * imd = get_driver("monitord");
+
+    if (!imd)
+    {
+        NebulaLog::error("InM", "Could not find information driver 'monitor'");
+
+        return -1;
+    }
+
+    string xml_hosts;
+
+    hpool->dump(xml_hosts, "", 0, -1, false);
+
+    Message<OpenNebulaMessages> msg;
+
+    msg.type(OpenNebulaMessages::HOST_LIST);
+    msg.payload(xml_hosts);
+
+    imd->write(msg);
+
+    return 0;
+}

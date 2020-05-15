@@ -94,6 +94,11 @@ public:
      */
     void delete_host(int hid);
 
+    /**
+     *  Set raft status, send info to monitor daemon
+     */
+    void raft_status(bool leader);
+
 protected:
     /**
      *  Received undefined message -> print error
@@ -114,6 +119,11 @@ protected:
      *  Message VM_STATE from monitor
      */
     void _vm_state(unique_ptr<Message<OpenNebulaMessages>> msg);
+
+    /**
+     *  Send list of all hosts to monitor daemon
+     */
+    int send_host_pool();
 
 private:
     /**

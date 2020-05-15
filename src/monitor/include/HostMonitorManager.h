@@ -82,6 +82,12 @@ public:
     void stop_host_monitor(int oid);
 
     /**
+     *  Raft status changed
+     *   @param status LEADER or FOLLOWER
+     */
+    void raft_status(bool leader);
+
+    /**
      *  Updates the information of the given host. If it does not exist it is
      *  added to the pool
      *    @param oid host id
@@ -158,6 +164,7 @@ private:
      */
     int monitor_interval_host;
 
+    bool is_leader;
     /**
      *  Time in seconds to expire a monitoring action (5 minutes)
      */
