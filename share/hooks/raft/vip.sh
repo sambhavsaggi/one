@@ -1,21 +1,68 @@
 #!/bin/bash -e
 
+# Setup virtual IP
+# usage:
+#     vip.sh action interface:ip [interface:ip ...]
+# Where action is one of:
+#   leader - New raft leader, set virtual IPs
+#   follower - unset virtual IPs
+
+# (Un)set the virtual IP
+function virtualip() {
+    INTERFACE="$1"
+    IFADDR="$2"
+    IP="${IFADDR%%/*}"
+
+    if [ -z "$INTERFACE" ]; then
+        echo "Missing interface." >&2
+        exit 1
+    fi
+
+    if [ -z "$IFADDR" ]; then
+        echo "Missing IP." >&2
+        exit 1
+    fi
+
+    ###
+
+    case $ACTION in
+    leader)
+        sudo -n ip address add $IFADDR dev $INTERFACE
+
+        for i in $(seq 5); do
+            sudo -n arping -c 1 -U -I $INTERFACE ${IP}
+            sleep 1
+            sudo -n arping -c 1 -A -I $INTERFACE ${IP}
+            sleep 1
+        done
+        ;;
+
+    follower)
+        if ip address show dev $INTERFACE | grep -qi " ${IP}/"; then
+            sudo -n ip address del $IFADDR dev $INTERFACE
+        fi
+        ;;
+
+    *)
+        echo "Unknown action '$ACTION'" >&2
+        exit 1
+        ;;
+    esac
+}
+
 ACTION="$1"
-INTERFACE="$2"
-IFADDR="$3"
-IP="${IFADDR%%/*}"
+shift
 
-if [ -z "$INTERFACE" ]; then
-    echo "Missing interface." >&2
-    exit 1
-fi
+# Process all parameters in the form of interface:IP
+for i in "$@"
+do
+    INTERFACE=${i%:*}
+    IP=${i#*:}
 
-if [ -z "$IFADDR" ]; then
-    echo "Missing IP." >&2
-    exit 1
-fi
+    virtualip $INTERFACE $IP
+done
 
-###
+# Start or stop OpenNebula services
 
 if which systemctl &>/dev/null && [ -d /etc/systemd ]; then
     IS_SYSTEMD=yes
@@ -25,15 +72,6 @@ fi
 
 case $ACTION in
 leader)
-    sudo -n ip address add $IFADDR dev $INTERFACE
-
-    for i in $(seq 5); do
-        sudo -n arping -c 1 -U -I $INTERFACE ${IP}
-        sleep 1
-        sudo -n arping -c 1 -A -I $INTERFACE ${IP}
-        sleep 1
-    done
-
     if [ "${IS_SYSTEMD}" = 'yes' ]; then
         if systemctl is-enabled opennebula-flow >/dev/null 2>&1; then
             sudo -n systemctl start opennebula-flow
@@ -62,10 +100,6 @@ leader)
     ;;
 
 follower)
-    if ip address show dev $INTERFACE | grep -qi " ${IP}/"; then
-        sudo -n ip address del $IFADDR dev $INTERFACE
-    fi
-
     if [ "${IS_SYSTEMD}" = 'yes' ]; then
         if systemctl is-enabled opennebula-flow >/dev/null 2>&1 ||
            systemctl is-active  opennebula-flow >/dev/null 2>&1;
