@@ -37,7 +37,7 @@ $LOAD_PATH << RUBY_LIB_LOCATION
 
 require 'opennebula'
 require 'vcenter_driver'
-require 'yaml'
+require 'yaml'  
 require 'socket'
 require 'base64'
 require 'resolv'
@@ -136,77 +136,62 @@ module VcenterMonitor
     end
 
     #---------------------------------------------------------------------------
+    #  Set of vcenter clusters each one representing a opennebula host
+    #  DataModel
     #
+    #  @clusters = {
+    #     host_id => {
+    #       :viclient => VCenterDriver::VIClient,
+    #       :host     => OpenNebula::Host
+    #       :error    => String (last error if any)
+    #     },
+    #     ....
+    #   }
     #
     #---------------------------------------------------------------------------
-    class VcenterHash
+    class VcenterClusters
         def initialize
             @mutex  = Mutex.new
             @client = OpenNebula::Client.new
 
-            @vcenters = {}
+            @clusters = {}
         end
 
-        # Add a new vcenter (if needed)
-        #   @param hid the host id
-        #   @param hone Host (un-encrypted parameters)
-        #   @param vcenter_id
-        def add_vcenter(hid, hone, vcenter_id)
-            @mutex.synchronize {
-                return unless @vcenters[vcenter_id].nil?
-            }
+        # Add a host by id, it access OpenNebula to get connection parameters
+        def add(hid)
+            host = OpenNebula::Host.new_with_id(hid, @client)
+            host.info(true)
 
-            if hone.nil?
-                hone = OpenNebula::Host.new_with_id(hid, @client)
-                hone.info(true)
+            vhost = host['TEMPLATE/VCENTER_HOST']
+            vuser = host['TEMPLATE/VCENTER_USER']
+            vpass = host['TEMPLATE/VCENTER_PASSWORD']
+            vccr  = host['TEMPLATE/VCENTER_PORT']
+            vrp   = host['TEMPLATE/VCENTER_RESOURCE_POOL']
+            vport = host['TEMPLATE/VCENTER_PORT']
+
+            if vhost.nil? || vuser.nil? || vpass.nil? || vccr.nil? || vrp.nil?
+                add_host(host.id, host, nil,
+                         'Missing vCenter connection parameters in host')
+                return
             end
 
-            vuser = hone["TEMPLATE/VCENTER_USER"]
-            vpass = hone["TEMPLATE/VCENTER_PASSWORD"]
-            vport = hone["TEMPLATE/VCENTER_PORT"]
-            vhost = hone["TEMPLATE/VCENTER_HOST"]
-
-            return if vuser.nil? || vpass.nil? || vport.nil? || vhost.nil?
-
-            @mutex.synchronize {
-                @vcenters[vcenter_id] = {
-                      :id    => vcenter_id,
-                      :vuser => vuser,
-                      :vpass => vpass,
-                      :vhost => vhost,
-                      :vport => vport,
-                      :hosts => []
-                }
+            connection = {
+                :host     => vhost,
+                :user     => vuser,
+                :password => vpass,
+                :rp       => vrp,
+                :ccr      => vccr,
             }
+
+            connection[:port] = vport if vport
+
+            add_host(host.id, host, connection, '')
         end
 
-        # Add a host
-        def add_host(id)
-            hone = OpenNebula::Host.new_with_id(id, @client)
-            hone.info(true)
-
-            vcenter_id = hone["TEMPLATE/VCENTER_INSTANCE_ID"]
-
-            return if vcenter_id.nil?
-
-            add_vcenter(id, hone, vcenter_id)
-
+        # Del a host from the @cluster hash
+        def del(hid)
             @mutex.synchronize {
-                @vcenters[vcenter_id][:hosts] << hone unless @vcenters[vcenter_id].nil?
-            }
-        end
-
-        # Del a host
-        def del_host(id)
-            hone = OpenNebula::Host.new_with_id(id, @client)
-            hone.info(true)
-
-            vcenter_id = hone["TEMPLATE/VCENTER_INSTANCE_ID"]
-
-            @mutex.synchronize {
-                return if vcenter_id.nil? || @vcenters[vcenter_id].nil?
-
-                @vcenters[vcenter_id][:hosts].delete_if {|h| h.id.to_i == id.to_i}
+                @clusters.delete(hid)
             }
         end
 
@@ -219,21 +204,32 @@ module VcenterMonitor
                 raise "Could not get hosts information - #{rc.message}"
             end
 
-            hpool.each do |hone|
-                vcenter_id = hone["TEMPLATE/VCENTER_INSTANCE_ID"]
+            hpool.each do |h|
+                next if h['IM_MAD'] != 'vcenter' || h['STATE'] == '8' #offline
 
-                next if vcenter_id.nil?
-
-                add_vcenter(hone["ID"], nil, vcenter_id)
-
-                @mutex.synchronize {
-                    @vcenters[vcenter_id][:hosts] << hone unless @vcenters[vcenter_id].nil?
-                }
+                add(h.id)
             end
         end
 
+        # Output the cluster hash into a string. DEBUG
         def to_s
-            @vcenters.to_s
+            @clusters.to_s
+        end
+
+        private
+
+        # Internal method to access @cluster hash
+        def add_host(id, host, connection, error)
+            vic = nil
+            vic = VCenterDriver::VIClient.new(connection, id) if connection
+
+            @mutex.synchronize {
+                @clusters[id] = {
+                    :vic   => vic,
+                    :host  => host,
+                    :error => error
+                }
+            }
         end
     end
 
@@ -243,9 +239,9 @@ module VcenterMonitor
     #---------------------------------------------------------------------------
     class VcenterMonitorManager
         def initialize
-            @vcenters = VcenterHash.new
+            @clusters = VcenterClusters.new
 
-            @vcenters.bootstrap
+            @clusters.bootstrap
 
             # Create timer thread to monitor vcenters
             Thread.new {
@@ -254,18 +250,18 @@ module VcenterMonitor
         end
 
         def start(hid, conf)
-            @vcenters.add_host(hid)
+            @clusters.add(hid)
         end
 
         def stop(hid, conf)
-            @vcenters.del_host(hid)
+            @clusters.del(hid)
         end
 
         def timer
             loop do
                 sleep 10
                 # Monitor vcenters and send monitor messages
-                puts @vcenters.to_s
+                puts @clusters.to_s
             end
         end
 
@@ -299,7 +295,7 @@ module VcenterMonitor
                     puts line
                     action, hid, conf = line.split
 
-                    @vcentermm.send(action.to_sym, hid, conf)
+                    @vcentermm.send(action.to_sym, hid.to_i, conf)
                 }
             end
         end
