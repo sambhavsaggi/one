@@ -57,6 +57,16 @@
               {{tr "Machine type"}}
             </label>
           </div>
+          <div class="medium-4 columns hypervisor only_kvm not_lxd not_firecracker">
+            <label>
+              {{tr "BIOS"}}
+              <select wizard_field="BIOS">
+                <option value=""></option>
+                <option value="BIOS">BIOS</option>
+                <option value="UEFI">UEFI</option>
+              </select>
+            </label>
+          </div>
         </div>
         <hr class="not_firecracker">
         <div class="row">
