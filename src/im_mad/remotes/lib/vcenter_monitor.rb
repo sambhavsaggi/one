@@ -14,7 +14,7 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-ONE_LOCATION ||= ENV['ONE_LOCATION'] unless defined? ONE_LOCATION
+ONE_LOCATION ||= ENV['ONE_LOCATION']
 
 if !ONE_LOCATION
     RUBY_LIB_LOCATION ||= '/usr/lib/one/ruby'
@@ -53,10 +53,10 @@ require_relative '../lib/probe_db'
 module VcenterMonitor
     CONFIGURATION = "#{VAR_LOCATION}/remotes/etc/vmm/vcenter/vcenterrc"
 
-    #-------------------------------------------------------------------------------
-    #  This class represents a monitord client. It handles udp and tcp connections
-    #  and send update messages to monitord
-    #-------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
+    #  This class represents a monitord client. It handles udp and tcp
+    #  connections and send update messages to monitord
+    #--------------------------------------------------------------------------
     class MonitorClient
 
         # Defined in src/monitor/include/MonitorDriverMessages.h
