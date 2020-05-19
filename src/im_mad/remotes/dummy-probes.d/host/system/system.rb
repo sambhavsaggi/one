@@ -116,6 +116,7 @@ end
 def system
     unindent(<<-EOS)
         ARCH=x86_64
+        BIOS=bios
         HYPERVISOR=dummy
         MODELNAME="Dummy(R) Core @ 3.2GHz"
         CPUSPEED=3200

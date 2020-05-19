@@ -193,6 +193,7 @@ class Domain < BaseDomain
         vcpu = REXML::XPath.first(doc, '/domain/vcpu').text
         mem  = REXML::XPath.first(doc, '/domain/memory').text.to_i / 1024
         arch = REXML::XPath.first(doc, '/domain/os/type').attributes['arch']
+        bios = REXML::XPath.first(doc, '/domain/os/bios').attributes['bios']
 
         spice = REXML::XPath.first(doc,
                                    "/domain/devices/graphics[@type='spice']")
@@ -228,7 +229,7 @@ class Domain < BaseDomain
         tmpl << "MEMORY=#{mem}\n"
         tmpl << "HYPERVISOR=\"kvm\"\n"
         tmpl << "DEPLOY_ID=\"#{uuid}\"\n"
-        tmpl << "OS=[ARCH=\"#{arch}\"]\n"
+        tmpl << "OS=[ARCH=\"#{arch}\"\nBIOS=\"#{bios}\"]\n"
         tmpl << features_txt << "\n" unless features_txt.empty?
         tmpl << spice_txt << "\n" unless spice_txt.empty?
         tmpl << vnc_txt << "\n" unless vnc_txt.empty?

@@ -217,6 +217,13 @@ EOT
             :format => String
         },
         {
+            :name   => 'bios',
+            :large  => '--bios bios',
+            :description =>
+                'BIOS of the VM, e.g.: bios or uefi',
+            :format => String
+        },
+        {
             :name   => 'memory',
             :large  => '--memory memory',
             :description => 'Memory amount given to the VM. By default the '<<
@@ -1414,12 +1421,13 @@ EOT
 
         template<<"NAME=\"#{options[:name]}\"\n" if options[:name]
 
-        if options[:arch] || options[:boot]
+        if (options[:arch] || options[:boot]) && options[:bios]
             template<<"OS = [\n"
 
             lines=[]
             lines<<"  ARCH = \"#{options[:arch]}\"" if options[:arch]
             lines<<"  BOOT = \"#{options[:boot]}\"" if options[:boot]
+            lines<<"  BIOS = \"#{options[:bios]}\"" if options[:bios]
 
             template<<lines.join(",\n")
 
